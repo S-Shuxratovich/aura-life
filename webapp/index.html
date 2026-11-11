@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Life Manager</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Inter',sans-serif;background:#0b0f19;color:#f8fafc;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+input,select{user-select:text}
+.app-bg{background-image:url('https://images.unsplash.com/photo-1512428559087-560fa5ceab42?q=80&w=1080&auto=format&fit=crop');background-size:cover;background-position:center;background-attachment:fixed}
+.glass{background:rgba(15,23,42,.42);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.18);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+.glass-card{background:rgba(255,255,255,.07);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.15)}
+.glass-input{background:rgba(15,23,42,.5);border:1px solid rgba(255,255,255,.15);color:#fff}
+.glass-input:focus{border-color:#10b981;outline:none;box-shadow:0 0 15px rgba(16,185,129,.3)}
+@keyframes liquidExpand{0%{transform:scale(.9);opacity:0;filter:blur(8px)}100%{transform:scale(1);opacity:1;filter:blur(0)}}
+.liquid-enter{animation:liquidExpand .45s cubic-bezier(.16,1,.3,1) forwards}
+.no-scrollbar::-webkit-scrollbar{display:none}
+#chatLog{max-height:48vh;overflow-y:auto}
+</style>
+</head>
+<body class="app-bg min-h-screen relative">
+<div class="absolute inset-0 bg-black/30 pointer-events-none z-0"></div>
+
+<div id="lockScreen" class="fixed inset-0 z-[60] flex flex-col items-center justify-center p-6" style="background:rgba(8,12,22,.97)">
+  <div class="w-20 h-20 rounded-full glass flex items-center justify-center mb-6 text-emerald-400 text-3xl"><i class="fa-solid fa-fingerprint"></i></div>
+  <h2 id="lockTitle" class="text-2xl font-bold mb-2"></h2>
+  <p id="lockSub" class="text-sm text-slate-300 mb-6 text-center"></p>
+  <div id="dots" class="flex gap-4 mb-4"></div>
+  <div id="lockError" class="text-red-400 text-xs font-medium min-h-[20px] mb-4 text-center px-4"></div>
+  <div id="keypad" class="grid grid-cols-3 gap-4 w-72 max-w-full"></div>
+  <button id="lockCancel" onclick="cancelLock()" class="hidden mt-6 text-sm text-slate-300">Bekor qilish</button>
+</div>
+
+<div id="mainApp" class="hidden relative z-10 flex flex-col min-h-screen pb-28">
+
+  <header class="p-4 flex items-center justify-between">
+    <div class="glass px-4 py-2.5 rounded-2xl flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400"><i id="wIcon" class="fa-solid fa-cloud-sun text-lg"></i></div>
+      <div>
+        <div id="dateTxt" class="text-xs text-slate-300 font-medium">...</div>
+        <div class="text-sm font-bold text-white"><span id="tempTxt">--°C</span> <span class="text-xs font-normal text-slate-300">Toshkent</span></div>
+      </div>
+    </div>
+    <div class="glass px-3 h-11 rounded-2xl flex items-center text-sm font-semibold" id="hdrName">Salom</div>
+  </header>
+
+  <main class="flex-1 px-4 pb-4">
+
+    <!-- BOSH -->
+    <section id="tab-home" class="space-y-5">
+      <div class="p-5 rounded-3xl glass bg-gradient-to-br from-emerald-900/50 to-slate-900/60 border border-emerald-500/30">
+        <div class="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-6">Umumiy balans</div>
+        <div class="text-2xl font-bold tracking-wider text-white"><span id="balance">0</span> <span class="text-xs font-normal text-emerald-300">UZS</span></div>
+      </div>
+
+      <div class="glass p-4 rounded-3xl grid grid-cols-3 gap-3 text-center">
+        <button onclick="openTx('income')" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:bg-white/10">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg"><i class="fa-solid fa-plus"></i></div>
+          <span class="text-xs text-slate-200">Kirim</span></button>
+        <button onclick="openTx('expense')" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:bg-white/10">
+          <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center text-lg"><i class="fa-solid fa-minus"></i></div>
+          <span class="text-xs text-slate-200">Xarajat</span></button>
+        <button onclick="switchTab('copilot')" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:bg-white/10">
+          <div class="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg"><i class="fa-solid fa-robot"></i></div>
+          <span class="text-xs text-slate-200">AI bilan</span></button>
+      </div>
+
+      <div class="glass p-5 rounded-3xl space-y-3">
+        <h3 class="text-base font-semibold">So'nggi operatsiyalar</h3>
+        <div id="recentList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- MOLIYA -->
+    <section id="tab-finance" class="space-y-5 hidden">
+      <div class="glass p-5 rounded-3xl space-y-4">
+        <h3 class="text-base font-semibold flex justify-between"><span>Oylik balans</span><span id="monthTxt" class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400"></span></h3>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="glass-card p-4 rounded-2xl"><div class="text-xs text-slate-400 mb-1">Kirimlar</div><div id="incomeTxt" class="text-base font-bold text-emerald-400">0</div></div>
+          <div class="glass-card p-4 rounded-2xl"><div class="text-xs text-slate-400 mb-1">Xarajatlar</div><div id="expenseTxt" class="text-base font-bold text-red-400">0</div></div>
+        </div>
+      </div>
+      <div class="glass p-5 rounded-3xl space-y-3">
+        <h3 class="text-base font-semibold">Xarajat kategoriyalari</h3>
+        <div id="catList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- REJALAR -->
+    <section id="tab-planning" class="space-y-5 hidden">
+      <div class="glass p-5 rounded-3xl space-y-4">
+        <h3 class="text-base font-semibold">Kun tartibi</h3>
+        <div class="flex gap-2">
+          <input id="taskTitle" placeholder="Yangi reja..." class="flex-1 min-w-0 px-3 py-2.5 rounded-xl glass-input text-sm">
+          <input id="taskTime" placeholder="15:00" class="w-20 px-3 py-2.5 rounded-xl glass-input text-sm">
+          <button onclick="addTask()" class="w-10 rounded-xl bg-emerald-500 text-white"><i class="fa-solid fa-plus"></i></button>
+        </div>
+        <div id="taskList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- AI -->
+    <section id="tab-copilot" class="space-y-4 hidden">
+      <div class="glass p-5 rounded-3xl space-y-4">
+        <h3 class="text-base font-semibold text-center">AI Sherik</h3>
+        <div id="chatLog" class="space-y-2 no-scrollbar">
+          <div class="text-xs text-slate-300 text-center">Masalan: «taksiga 30 ming sarfladim», «ertaga 10:00 da uchrashuv», «bu oy qancha sarfladim?»<br>🎙 Mikrofon tugmasi yoki botga ovozli xabar yuboring.</div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="toggleVoice()" id="micBtn" class="w-11 h-11 rounded-xl glass-card text-emerald-400 shrink-0"><i class="fa-solid fa-microphone"></i></button>
+          <input id="chatInput" placeholder="Yozing yoki gapiring..." class="flex-1 min-w-0 px-3 rounded-xl glass-input text-sm" onkeydown="if(event.key==='Enter')sendChat()">
+          <button onclick="sendChat()" class="w-11 h-11 rounded-xl bg-emerald-500 text-white shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROFIL -->
+    <section id="tab-profile" class="space-y-5 hidden">
+      <div class="glass p-5 rounded-3xl text-center space-y-2">
+        <div class="w-20 h-20 rounded-full glass mx-auto flex items-center justify-center text-3xl text-slate-300"><i class="fa-solid fa-user"></i></div>
+        <h3 id="profName" class="text-lg font-bold">Foydalanuvchi</h3>
+        <p id="profId" class="text-xs text-emerald-400"></p>
+      </div>
+      <div class="glass p-5 rounded-3xl space-y-3">
+        <h3 class="text-base font-semibold">Sozlamalar</h3>
+        <button onclick="showLock('old', true)" class="w-full py-3 rounded-xl glass-card text-sm flex items-center justify-center gap-2"><i class="fa-solid fa-key text-emerald-400"></i> PIN-kodni o'zgartirish</button>
+        <label class="text-xs text-slate-300 block">Fon rasmi</label>
+        <select onchange="changeWallpaper(this.value)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+          <option value="https://images.unsplash.com/photo-1512428559087-560fa5ceab42?q=80&w=1080&auto=format&fit=crop">Tropik Monstera</option>
+          <option value="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1080&auto=format&fit=crop">Tropik Sohil</option>
+          <option value="https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1080&auto=format&fit=crop">Kosmik Qora</option>
+        </select>
+      </div>
+    </section>
+  </main>
+
+  <nav class="fixed bottom-4 left-4 right-4 z-40">
+    <div class="glass p-2 rounded-full flex items-center justify-around">
+      <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center py-2 px-3 rounded-full text-emerald-400 bg-white/10"><i class="fa-solid fa-house text-lg"></i><span class="text-[10px] mt-0.5">Bosh</span></button>
+      <button onclick="switchTab('finance')" id="nav-finance" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-wallet text-lg"></i><span class="text-[10px] mt-0.5">Moliya</span></button>
+      <button onclick="switchTab('planning')" id="nav-planning" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-calendar-days text-lg"></i><span class="text-[10px] mt-0.5">Rejalar</span></button>
+      <button onclick="switchTab('copilot')" id="nav-copilot" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-robot text-lg"></i><span class="text-[10px] mt-0.5">AI</span></button>
+      <button onclick="switchTab('profile')" id="nav-profile" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-user text-lg"></i><span class="text-[10px] mt-0.5">Profil</span></button>
+    </div>
+  </nav>
+</div>
+
+<!-- Kirim/Xarajat oynasi -->
+<div id="txModal" class="fixed inset-0 z-50 hidden items-end bg-black/60">
+  <div class="glass w-full rounded-t-3xl p-5 space-y-3 liquid-enter">
+    <h3 id="txTitle" class="text-base font-semibold"></h3>
+    <input id="txAmount" type="number" inputmode="numeric" placeholder="Summa (UZS)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+    <input id="txCat" placeholder="Kategoriya (Ovqatlanish, Transport...)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+    <input id="txNote" placeholder="Izoh (ixtiyoriy)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+    <div class="flex gap-2">
+      <button onclick="closeTx()" class="flex-1 py-3 rounded-xl glass-card text-sm">Bekor</button>
+      <button onclick="saveTx()" class="flex-1 py-3 rounded-xl bg-emerald-500 text-sm font-semibold">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready(); tg?.expand();
+
+let SESSION = '', pinMode = 'verify', pinBuf = '', pinFirst = '', pinOld = '', pinBusy = false;
+const PIN_LEN = 4;
+
+const api = async (path, method = 'GET', body) => {
+  const h = {'X-Init-Data': tg?.initData || '', 'X-Session': SESSION};
+  let payload;
+  if (body instanceof Blob) { h['Content-Type'] = body.type || 'application/octet-stream'; payload = body; }
+  else if (body) { h['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
+  const r = await fetch('/api' + path, {method, headers: h, body: payload});
+  const txt = await r.text();
+  let data = null; try { data = JSON.parse(txt); } catch {}
+  if (!r.ok) {
+    const d = data?.detail;
+    if (r.status === 403 && d === 'locked') showLock('verify');
+    if (r.status === 403 && d === 'pin_required') showLock('new');
+    throw new Error(typeof d === 'string' ? d : txt);
+  }
+  return data;
+};
+
+/* ---------- PIN ekrani ---------- */
+const LOCK_TXT = {
+  verify: ['Xavfsizlik tizimi', 'PIN-kodni kiriting'],
+  old: ["PIN o'zgartirish", 'Joriy PIN-kodni kiriting'],
+  new: ['Yangi PIN', `${PIN_LEN} xonali PIN o'rnating`],
+  confirm: ['PIN ni tasdiqlang', 'Yana bir bor kiriting']
+};
+let canCancel = false;
+function showLock(mode, cancelable = false) {
+  pinMode = mode; pinBuf = ''; canCancel = cancelable;
+  document.getElementById('lockTitle').textContent = LOCK_TXT[mode][0];
+  document.getElementById('lockSub').textContent = LOCK_TXT[mode][1];
+  document.getElementById('lockError').textContent = '';
+  document.getElementById('lockCancel').classList.toggle('hidden', !cancelable);
+  document.getElementById('lockScreen').classList.remove('hidden');
+  document.getElementById('mainApp').classList.add('hidden');
+  drawDots();
+}
+function lockErr(m) {
+  const e = document.getElementById('lockError'); e.textContent = m;
+  setTimeout(() => { if (e.textContent === m) e.textContent = ''; }, 5000);
+}
+function unlock() {
+  document.getElementById('lockScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  loadSummary().catch(() => {}); loadTasks().catch(() => {});
+}
+function cancelLock() {
+  document.getElementById('lockScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+}
+function buildKeypad() {
+  const keys = ['1','2','3','4','5','6','7','8','9','C','0','⌫'];
+  document.getElementById('keypad').innerHTML = keys.map(k => `<button onclick="pressKey('${k}')" class="h-16 rounded-2xl glass-card text-xl font-semibold active:bg-white/20">${k === '⌫' ? '<i class="fa-solid fa-delete-left"></i>' : k === 'C' ? '<span class="text-sm text-red-300">Tozalash</span>' : k}</button>`).join('');
+  document.getElementById('dots').innerHTML = Array.from({length: PIN_LEN}, (_, i) => `<div id="dot${i}" class="w-4 h-4 rounded-full border border-white/40 transition-all"></div>`).join('');
+}
+function drawDots() {
+  for (let i = 0; i < PIN_LEN; i++) {
+    const d = document.getElementById('dot' + i);
+    d.classList.toggle('bg-emerald-400', i < pinBuf.length);
+    d.classList.toggle('border-emerald-400', i < pinBuf.length);
+  }
+}
+function pressKey(k) {
+  if (pinBusy) return;
+  if (k === 'C') pinBuf = '';
+  else if (k === '⌫') pinBuf = pinBuf.slice(0, -1);
+  else if (pinBuf.length < PIN_LEN) pinBuf += k;
+  drawDots();
+  if (pinBuf.length === PIN_LEN) setTimeout(pinDone, 150);
+}
+async function pinDone() {
+  pinBusy = true; const pin = pinBuf; pinBuf = ''; drawDots();
+  try {
+    if (pinMode === 'verify') { SESSION = (await api('/pin/verify', 'POST', {pin})).token; unlock(); }
+    else if (pinMode === 'old') { SESSION = (await api('/pin/verify', 'POST', {pin})).token; pinOld = pin; showLock('new', true); }
+    else if (pinMode === 'new') { pinFirst = pin; showLock('confirm', canCancel); }
+    else if (pinMode === 'confirm') {
+      if (pin !== pinFirst) { showLock('new', canCancel); lockErr('PIN-kodlar mos kelmadi, qaytadan kiriting'); }
+      else { SESSION = (await api('/pin/set', 'POST', {pin, old_pin: pinOld})).token; pinOld = ''; unlock(); }
+    }
+  } catch (e) { lockErr(e.message); }
+  pinBusy = false;
+}
+// Ilova 60 soniyadan ortiq yashirin tursa, qayta PIN so'raydi
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (hiddenAt && SESSION && Date.now() - hiddenAt > 60000) { SESSION = ''; showLock('verify'); }
+});
+
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n || 0).toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MONTHS = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+const DAYS = ['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'];
+
+/* ---------- Tablar ---------- */
+function switchTab(id) {
+  ['home','finance','planning','copilot','profile'].forEach(t => {
+    const on = t === id;
+    $('tab-' + t).classList.toggle('hidden', !on);
+    if (on) $('tab-' + t).classList.add('liquid-enter');
+    const b = $('nav-' + t);
+    b.classList.toggle('text-emerald-400', on);
+    b.classList.toggle('bg-white/10', on);
+    b.classList.toggle('text-slate-400', !on);
+  });
+}
+function changeWallpaper(url) { document.body.style.backgroundImage = `url('${url}')`; }
+
+/* ---------- Sarlavha: sana, ob-havo, ism ---------- */
+function initHeader() {
+  const d = new Date();
+  $('dateTxt').textContent = `${DAYS[d.getDay()]} | ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  $('monthTxt').textContent = MONTHS[d.getMonth()];
+  const u = tg?.initDataUnsafe?.user;
+  const name = u ? (u.first_name || u.username || 'Foydalanuvchi') : 'Foydalanuvchi';
+  $('hdrName').textContent = name;
+  $('profName').textContent = name;
+  $('profId').textContent = u ? `ID: ${u.id}` : '';
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=41.31&longitude=69.24&current=temperature_2m,weather_code')
+    .then(r => r.json()).then(j => {
+      $('tempTxt').textContent = Math.round(j.current.temperature_2m) + '°C';
+      const c = j.current.weather_code;
+      $('wIcon').className = 'fa-solid text-lg ' + (c === 0 ? 'fa-sun' : c < 4 ? 'fa-cloud-sun' : c < 70 ? 'fa-cloud-rain' : 'fa-snowflake');
+    }).catch(() => {});
+}
+
+/* ---------- Moliya ---------- */
+function txRow(t) {
+  const inc = t.kind === 'income';
+  return `<div class="flex items-center justify-between p-3 rounded-2xl glass-card">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl ${inc ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} flex items-center justify-center"><i class="fa-solid ${inc ? 'fa-arrow-down' : 'fa-arrow-up'}"></i></div>
+      <div><div class="text-sm font-semibold">${esc(t.category)}</div><div class="text-xs text-slate-400">${esc(t.note || '')}</div></div>
+    </div>
+    <div class="text-right"><div class="text-sm font-bold ${inc ? 'text-emerald-400' : 'text-red-400'}">${inc ? '+' : '-'} ${fmt(t.amount)}</div>
+    <div class="text-xs text-slate-400">${esc(t.created.slice(5, 16).replace('T', ' '))}</div></div></div>`;
+}
+async function loadSummary() {
+  const s = await api('/summary');
+  $('balance').textContent = fmt(s.balance);
+  $('incomeTxt').textContent = '+ ' + fmt(s.income);
+  $('expenseTxt').textContent = '- ' + fmt(s.expense);
+  $('recentList').innerHTML = s.recent.length ? s.recent.map(txRow).join('') : '<div class="text-xs text-slate-400">Hali operatsiya yo\'q</div>';
+  $('catList').innerHTML = s.categories.length ? s.categories.map(c => `
+    <div class="flex items-center justify-between p-3 rounded-2xl glass-card">
+      <span class="text-sm">${esc(c.category)}</span><span class="text-sm font-bold">${fmt(c.s)} UZS</span></div>`).join('')
+    : '<div class="text-xs text-slate-400">Bu oy xarajat yo\'q</div>';
+}
+let txKind = 'expense';
+function openTx(kind) {
+  txKind = kind;
+  $('txTitle').textContent = kind === 'income' ? 'Yangi kirim' : 'Yangi xarajat';
+  $('txModal').classList.remove('hidden'); $('txModal').classList.add('flex');
+}
+function closeTx() {
+  $('txModal').classList.add('hidden'); $('txModal').classList.remove('flex');
+  ['txAmount','txCat','txNote'].forEach(i => $(i).value = '');
+}
+async function saveTx() {
+  const amount = parseInt($('txAmount').value, 10);
+  if (!amount || amount <= 0) return tg?.showAlert ? tg.showAlert('Summani kiriting') : alert('Summani kiriting');
+  await api('/transactions', 'POST', {kind: txKind, amount, category: $('txCat').value || 'Boshqa', note: $('txNote').value});
+  closeTx(); loadSummary();
+}
+
+/* ---------- Rejalar ---------- */
+async function loadTasks() {
+  const tasks = await api('/tasks');
+  $('taskList').innerHTML = tasks.length ? tasks.map(t => `
+    <div class="flex items-center justify-between p-3.5 rounded-2xl glass-card border-l-4 border-l-emerald-400">
+      <div class="min-w-0"><div class="text-xs text-emerald-400 font-semibold">${esc(t.time || '')}</div>
+      <div class="text-sm font-medium ${t.done ? 'line-through opacity-50' : ''}">${esc(t.title)}</div></div>
+      <div class="flex items-center gap-3 shrink-0">
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})" class="w-5 h-5 accent-emerald-500">
+        <button onclick="delTask(${t.id})" class="text-slate-400"><i class="fa-solid fa-trash-can"></i></button>
+      </div></div>`).join('') : '<div class="text-xs text-slate-400">Rejalar yo\'q</div>';
+}
+async function addTask() {
+  const title = $('taskTitle').value.trim();
+  if (!title) return;
+  await api('/tasks', 'POST', {title, time: $('taskTime').value});
+  $('taskTitle').value = ''; $('taskTime').value = ''; loadTasks();
+}
+const toggleTask = async id => { await api(`/tasks/${id}/toggle`, 'POST'); loadTasks(); };
+const delTask = async id => { await api(`/tasks/${id}`, 'DELETE'); loadTasks(); };
+
+/* ---------- AI chat ---------- */
+function bubble(role, text) {
+  const d = document.createElement('div');
+  d.className = 'text-sm px-3 py-2 rounded-2xl max-w-[85%] ' + (role === 'me' ? 'bg-emerald-600 ml-auto' : 'glass-card');
+  d.textContent = text;
+  $('chatLog').appendChild(d);
+  $('chatLog').scrollTop = 1e9;
+  return d;
+}
+let sending = false;
+async function sendChat(override) {
+  const text = (override || $('chatInput').value).trim();
+  if (!text || sending) return;
+  sending = true; $('chatInput').value = '';
+  bubble('me', text);
+  const wait = bubble('ai', '...');
+  try {
+    const r = await api('/ai', 'POST', {message: text});
+    wait.textContent = r.reply;
+    if (r.changed) { loadSummary(); loadTasks(); }
+  } catch (e) { wait.textContent = "Xatolik yuz berdi, qayta urinib ko'ring."; }
+  sending = false;
+}
+
+/* ---------- Ovoz: yozib serverga yuboriladi (Aisha STT) ---------- */
+let rec = null, recTimer = null;
+function micUI(on) {
+  $('micBtn').classList.toggle('bg-red-500/40', on);
+  $('micBtn').innerHTML = on ? '<i class="fa-solid fa-stop"></i>' : '<i class="fa-solid fa-microphone"></i>';
+}
+async function toggleVoice() {
+  if (rec) { rec.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    bubble('ai', "Bu qurilmada ilova ichida yozib bo'lmaydi. Botga ovozli xabar yuboring 🎙"); return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio: true}); }
+  catch { bubble('ai', "Mikrofonga ruxsat yo'q. Botga ovozli xabar yuboring 🎙"); return; }
+  const chunks = []; const r = new MediaRecorder(stream); rec = r;
+  r.ondataavailable = e => chunks.push(e.data);
+  r.onstop = async () => {
+    clearTimeout(recTimer); stream.getTracks().forEach(t => t.stop()); rec = null; micUI(false);
+    const blob = new Blob(chunks, {type: r.mimeType || 'audio/webm'});
+    if (blob.size < 1500) return;
+    const wait = bubble('ai', 'Tinglayapman...');
+    try {
+      const {text} = await api('/voice', 'POST', blob);
+      wait.remove();
+      text ? sendChat(text) : bubble('ai', "Ovozni tushunmadim, qayta urinib ko'ring.");
+    } catch (e) { wait.textContent = "Ovozni o'qib bo'lmadi. Botga ovozli xabar yuborib ko'ring."; }
+  };
+  r.start(); micUI(true);
+  recTimer = setTimeout(() => r.state === 'recording' && r.stop(), 30000);
+}
+
+/* ---------- Boshlash ---------- */
+buildKeypad();
+initHeader();
+api('/pin/status').then(st => showLock(st.has_pin ? 'verify' : 'new'))
+  .catch(e => { showLock('verify'); lockErr(e.message); });
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Inter',sans-serif;background:#0b0f19;color:#f8fafc;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+input,select{user-select:text}
+.app-bg{background-image:url('https://images.unsplash.com/photo-1512428559087-560fa5ceab42?q=80&w=1080&auto=format&fit=crop');background-size:cover;background-position:center;background-attachment:fixed}
+.glass{background:rgba(15,23,42,.42);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.18);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+.glass-card{background:rgba(255,255,255,.07);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.15)}
+.glass-input{background:rgba(15,23,42,.5);border:1px solid rgba(255,255,255,.15);color:#fff}
+.glass-input:focus{border-color:#10b981;outline:none;box-shadow:0 0 15px rgba(16,185,129,.3)}
+@keyframes liquidExpand{0%{transform:scale(.9);opacity:0;filter:blur(8px)}100%{transform:scale(1);opacity:1;filter:blur(0)}}
+.liquid-enter{animation:liquidExpand .45s cubic-bezier(.16,1,.3,1) forwards}
+.no-scrollbar::-webkit-scrollbar{display:none}
+#chatLog{max-height:48vh;overflow-y:auto}
+</style>
+</head>
+<body class="app-bg min-h-screen relative">
+<div class="absolute inset-0 bg-black/30 pointer-events-none z-0"></div>
+
+<div id="lockScreen" class="fixed inset-0 z-[60] flex flex-col items-center justify-center p-6" style="background:rgba(8,12,22,.97)">
+  <div class="w-20 h-20 rounded-full glass flex items-center justify-center mb-6 text-emerald-400 text-3xl"><i class="fa-solid fa-fingerprint"></i></div>
+  <h2 id="lockTitle" class="text-2xl font-bold mb-2"></h2>
+  <p id="lockSub" class="text-sm text-slate-300 mb-6 text-center"></p>
+  <div id="dots" class="flex gap-4 mb-4"></div>
+  <div id="lockError" class="text-red-400 text-xs font-medium min-h-[20px] mb-4 text-center px-4"></div>
+  <div id="keypad" class="grid grid-cols-3 gap-4 w-72 max-w-full"></div>
+  <button id="lockCancel" onclick="cancelLock()" class="hidden mt-6 text-sm text-slate-300">Bekor qilish</button>
+</div>
+
+<div id="mainApp" class="hidden relative z-10 flex flex-col min-h-screen pb-28">
+
+  <header class="p-4 flex items-center justify-between">
+    <div class="glass px-4 py-2.5 rounded-2xl flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400"><i id="wIcon" class="fa-solid fa-cloud-sun text-lg"></i></div>
+      <div>
+        <div id="dateTxt" class="text-xs text-slate-300 font-medium">...</div>
+        <div class="text-sm font-bold text-white"><span id="tempTxt">--°C</span> <span class="text-xs font-normal text-slate-300">Toshkent</span></div>
+      </div>
+    </div>
+    <div class="glass px-3 h-11 rounded-2xl flex items-center text-sm font-semibold" id="hdrName">Salom</div>
+  </header>
+
+  <main class="flex-1 px-4 pb-4">
+
+    <!-- BOSH -->
+    <section id="tab-home" class="space-y-5">
+      <div class="p-5 rounded-3xl glass bg-gradient-to-br from-emerald-900/50 to-slate-900/60 border border-emerald-500/30">
+        <div class="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-6">Umumiy balans</div>
+        <div class="text-2xl font-bold tracking-wider text-white"><span id="balance">0</span> <span class="text-xs font-normal text-emerald-300">UZS</span></div>
+      </div>
+
+      <div class="glass p-4 rounded-3xl grid grid-cols-3 gap-3 text-center">
+        <button onclick="openTx('income')" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:bg-white/10">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg"><i class="fa-solid fa-plus"></i></div>
+          <span class="text-xs text-slate-200">Kirim</span></button>
+        <button onclick="openTx('expense')" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:bg-white/10">
+          <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center text-lg"><i class="fa-solid fa-minus"></i></div>
+          <span class="text-xs text-slate-200">Xarajat</span></button>
+        <button onclick="switchTab('copilot')" class="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:bg-white/10">
+          <div class="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg"><i class="fa-solid fa-robot"></i></div>
+          <span class="text-xs text-slate-200">AI bilan</span></button>
+      </div>
+
+      <div class="glass p-5 rounded-3xl space-y-3">
+        <h3 class="text-base font-semibold">So'nggi operatsiyalar</h3>
+        <div id="recentList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- MOLIYA -->
+    <section id="tab-finance" class="space-y-5 hidden">
+      <div class="glass p-5 rounded-3xl space-y-4">
+        <h3 class="text-base font-semibold flex justify-between"><span>Oylik balans</span><span id="monthTxt" class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400"></span></h3>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="glass-card p-4 rounded-2xl"><div class="text-xs text-slate-400 mb-1">Kirimlar</div><div id="incomeTxt" class="text-base font-bold text-emerald-400">0</div></div>
+          <div class="glass-card p-4 rounded-2xl"><div class="text-xs text-slate-400 mb-1">Xarajatlar</div><div id="expenseTxt" class="text-base font-bold text-red-400">0</div></div>
+        </div>
+      </div>
+      <div class="glass p-5 rounded-3xl space-y-3">
+        <h3 class="text-base font-semibold">Xarajat kategoriyalari</h3>
+        <div id="catList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- REJALAR -->
+    <section id="tab-planning" class="space-y-5 hidden">
+      <div class="glass p-5 rounded-3xl space-y-4">
+        <h3 class="text-base font-semibold">Kun tartibi</h3>
+        <div class="flex gap-2">
+          <input id="taskTitle" placeholder="Yangi reja..." class="flex-1 min-w-0 px-3 py-2.5 rounded-xl glass-input text-sm">
+          <input id="taskTime" placeholder="15:00" class="w-20 px-3 py-2.5 rounded-xl glass-input text-sm">
+          <button onclick="addTask()" class="w-10 rounded-xl bg-emerald-500 text-white"><i class="fa-solid fa-plus"></i></button>
+        </div>
+        <div id="taskList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- AI -->
+    <section id="tab-copilot" class="space-y-4 hidden">
+      <div class="glass p-5 rounded-3xl space-y-4">
+        <h3 class="text-base font-semibold text-center">AI Sherik</h3>
+        <div id="chatLog" class="space-y-2 no-scrollbar">
+          <div class="text-xs text-slate-300 text-center">Masalan: «taksiga 30 ming sarfladim», «ertaga 10:00 da uchrashuv», «bu oy qancha sarfladim?»<br>🎙 Mikrofon tugmasi yoki botga ovozli xabar yuboring.</div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="toggleVoice()" id="micBtn" class="w-11 h-11 rounded-xl glass-card text-emerald-400 shrink-0"><i class="fa-solid fa-microphone"></i></button>
+          <input id="chatInput" placeholder="Yozing yoki gapiring..." class="flex-1 min-w-0 px-3 rounded-xl glass-input text-sm" onkeydown="if(event.key==='Enter')sendChat()">
+          <button onclick="sendChat()" class="w-11 h-11 rounded-xl bg-emerald-500 text-white shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROFIL -->
+    <section id="tab-profile" class="space-y-5 hidden">
+      <div class="glass p-5 rounded-3xl text-center space-y-2">
+        <div class="w-20 h-20 rounded-full glass mx-auto flex items-center justify-center text-3xl text-slate-300"><i class="fa-solid fa-user"></i></div>
+        <h3 id="profName" class="text-lg font-bold">Foydalanuvchi</h3>
+        <p id="profId" class="text-xs text-emerald-400"></p>
+      </div>
+      <div class="glass p-5 rounded-3xl space-y-3">
+        <h3 class="text-base font-semibold">Sozlamalar</h3>
+        <button onclick="showLock('old', true)" class="w-full py-3 rounded-xl glass-card text-sm flex items-center justify-center gap-2"><i class="fa-solid fa-key text-emerald-400"></i> PIN-kodni o'zgartirish</button>
+        <label class="text-xs text-slate-300 block">Fon rasmi</label>
+        <select onchange="changeWallpaper(this.value)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+          <option value="https://images.unsplash.com/photo-1512428559087-560fa5ceab42?q=80&w=1080&auto=format&fit=crop">Tropik Monstera</option>
+          <option value="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1080&auto=format&fit=crop">Tropik Sohil</option>
+          <option value="https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1080&auto=format&fit=crop">Kosmik Qora</option>
+        </select>
+      </div>
+    </section>
+  </main>
+
+  <nav class="fixed bottom-4 left-4 right-4 z-40">
+    <div class="glass p-2 rounded-full flex items-center justify-around">
+      <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center py-2 px-3 rounded-full text-emerald-400 bg-white/10"><i class="fa-solid fa-house text-lg"></i><span class="text-[10px] mt-0.5">Bosh</span></button>
+      <button onclick="switchTab('finance')" id="nav-finance" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-wallet text-lg"></i><span class="text-[10px] mt-0.5">Moliya</span></button>
+      <button onclick="switchTab('planning')" id="nav-planning" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-calendar-days text-lg"></i><span class="text-[10px] mt-0.5">Rejalar</span></button>
+      <button onclick="switchTab('copilot')" id="nav-copilot" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-robot text-lg"></i><span class="text-[10px] mt-0.5">AI</span></button>
+      <button onclick="switchTab('profile')" id="nav-profile" class="flex flex-col items-center py-2 px-3 rounded-full text-slate-400"><i class="fa-solid fa-user text-lg"></i><span class="text-[10px] mt-0.5">Profil</span></button>
+    </div>
+  </nav>
+</div>
+
+<!-- Kirim/Xarajat oynasi -->
+<div id="txModal" class="fixed inset-0 z-50 hidden items-end bg-black/60">
+  <div class="glass w-full rounded-t-3xl p-5 space-y-3 liquid-enter">
+    <h3 id="txTitle" class="text-base font-semibold"></h3>
+    <input id="txAmount" type="number" inputmode="numeric" placeholder="Summa (UZS)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+    <input id="txCat" placeholder="Kategoriya (Ovqatlanish, Transport...)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+    <input id="txNote" placeholder="Izoh (ixtiyoriy)" class="w-full px-4 py-2.5 rounded-xl glass-input text-sm">
+    <div class="flex gap-2">
+      <button onclick="closeTx()" class="flex-1 py-3 rounded-xl glass-card text-sm">Bekor</button>
+      <button onclick="saveTx()" class="flex-1 py-3 rounded-xl bg-emerald-500 text-sm font-semibold">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready(); tg?.expand();
+
+let SESSION = '', pinMode = 'verify', pinBuf = '', pinFirst = '', pinOld = '', pinBusy = false;
+const PIN_LEN = 4;
+
+const api = async (path, method = 'GET', body) => {
+  const h = {'X-Init-Data': tg?.initData || '', 'X-Session': SESSION};
+  let payload;
+  if (body instanceof Blob) { h['Content-Type'] = body.type || 'application/octet-stream'; payload = body; }
+  else if (body) { h['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
+  const r = await fetch('/api' + path, {method, headers: h, body: payload});
+  const txt = await r.text();
+  let data = null; try { data = JSON.parse(txt); } catch {}
+  if (!r.ok) {
+    const d = data?.detail;
+    if (r.status === 403 && d === 'locked') showLock('verify');
+    if (r.status === 403 && d === 'pin_required') showLock('new');
+    throw new Error(typeof d === 'string' ? d : txt);
+  }
+  return data;
+};
+
+/* ---------- PIN ekrani ---------- */
+const LOCK_TXT = {
+  verify: ['Xavfsizlik tizimi', 'PIN-kodni kiriting'],
+  old: ["PIN o'zgartirish", 'Joriy PIN-kodni kiriting'],
+  new: ['Yangi PIN', `${PIN_LEN} xonali PIN o'rnating`],
+  confirm: ['PIN ni tasdiqlang', 'Yana bir bor kiriting']
+};
+let canCancel = false;
+function showLock(mode, cancelable = false) {
+  pinMode = mode; pinBuf = ''; canCancel = cancelable;
+  document.getElementById('lockTitle').textContent = LOCK_TXT[mode][0];
+  document.getElementById('lockSub').textContent = LOCK_TXT[mode][1];
+  document.getElementById('lockError').textContent = '';
+  document.getElementById('lockCancel').classList.toggle('hidden', !cancelable);
+  document.getElementById('lockScreen').classList.remove('hidden');
+  document.getElementById('mainApp').classList.add('hidden');
+  drawDots();
+}
+function lockErr(m) {
+  const e = document.getElementById('lockError'); e.textContent = m;
+  setTimeout(() => { if (e.textContent === m) e.textContent = ''; }, 5000);
+}
+function unlock() {
+  document.getElementById('lockScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  loadSummary().catch(() => {}); loadTasks().catch(() => {});
+}
+function cancelLock() {
+  document.getElementById('lockScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+}
+function buildKeypad() {
+  const keys = ['1','2','3','4','5','6','7','8','9','C','0','⌫'];
+  document.getElementById('keypad').innerHTML = keys.map(k => `<button onclick="pressKey('${k}')" class="h-16 rounded-2xl glass-card text-xl font-semibold active:bg-white/20">${k === '⌫' ? '<i class="fa-solid fa-delete-left"></i>' : k === 'C' ? '<span class="text-sm text-red-300">Tozalash</span>' : k}</button>`).join('');
+  document.getElementById('dots').innerHTML = Array.from({length: PIN_LEN}, (_, i) => `<div id="dot${i}" class="w-4 h-4 rounded-full border border-white/40 transition-all"></div>`).join('');
+}
+function drawDots() {
+  for (let i = 0; i < PIN_LEN; i++) {
+    const d = document.getElementById('dot' + i);
+    d.classList.toggle('bg-emerald-400', i < pinBuf.length);
+    d.classList.toggle('border-emerald-400', i < pinBuf.length);
+  }
+}
+function pressKey(k) {
+  if (pinBusy) return;
+  if (k === 'C') pinBuf = '';
+  else if (k === '⌫') pinBuf = pinBuf.slice(0, -1);
+  else if (pinBuf.length < PIN_LEN) pinBuf += k;
+  drawDots();
+  if (pinBuf.length === PIN_LEN) setTimeout(pinDone, 150);
+}
+async function pinDone() {
+  pinBusy = true; const pin = pinBuf; pinBuf = ''; drawDots();
+  try {
+    if (pinMode === 'verify') { SESSION = (await api('/pin/verify', 'POST', {pin})).token; unlock(); }
+    else if (pinMode === 'old') { SESSION = (await api('/pin/verify', 'POST', {pin})).token; pinOld = pin; showLock('new', true); }
+    else if (pinMode === 'new') { pinFirst = pin; showLock('confirm', canCancel); }
+    else if (pinMode === 'confirm') {
+      if (pin !== pinFirst) { showLock('new', canCancel); lockErr('PIN-kodlar mos kelmadi, qaytadan kiriting'); }
+      else { SESSION = (await api('/pin/set', 'POST', {pin, old_pin: pinOld})).token; pinOld = ''; unlock(); }
+    }
+  } catch (e) { lockErr(e.message); }
+  pinBusy = false;
+}
+// Ilova 60 soniyadan ortiq yashirin tursa, qayta PIN so'raydi
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (hiddenAt && SESSION && Date.now() - hiddenAt > 60000) { SESSION = ''; showLock('verify'); }
+});
+
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n || 0).toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MONTHS = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+const DAYS = ['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'];
+
+/* ---------- Tablar ---------- */
+function switchTab(id) {
+  ['home','finance','planning','copilot','profile'].forEach(t => {
+    const on = t === id;
+    $('tab-' + t).classList.toggle('hidden', !on);
+    if (on) $('tab-' + t).classList.add('liquid-enter');
+    const b = $('nav-' + t);
+    b.classList.toggle('text-emerald-400', on);
+    b.classList.toggle('bg-white/10', on);
+    b.classList.toggle('text-slate-400', !on);
+  });
+}
+function changeWallpaper(url) { document.body.style.backgroundImage = `url('${url}')`; }
+
+/* ---------- Sarlavha: sana, ob-havo, ism ---------- */
+function initHeader() {
+  const d = new Date();
+  $('dateTxt').textContent = `${DAYS[d.getDay()]} | ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  $('monthTxt').textContent = MONTHS[d.getMonth()];
+  const u = tg?.initDataUnsafe?.user;
+  const name = u ? (u.first_name || u.username || 'Foydalanuvchi') : 'Foydalanuvchi';
+  $('hdrName').textContent = name;
+  $('profName').textContent = name;
+  $('profId').textContent = u ? `ID: ${u.id}` : '';
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=41.31&longitude=69.24&current=temperature_2m,weather_code')
+    .then(r => r.json()).then(j => {
+      $('tempTxt').textContent = Math.round(j.current.temperature_2m) + '°C';
+      const c = j.current.weather_code;
+      $('wIcon').className = 'fa-solid text-lg ' + (c === 0 ? 'fa-sun' : c < 4 ? 'fa-cloud-sun' : c < 70 ? 'fa-cloud-rain' : 'fa-snowflake');
+    }).catch(() => {});
+}
+
+/* ---------- Moliya ---------- */
+function txRow(t) {
+  const inc = t.kind === 'income';
+  return `<div class="flex items-center justify-between p-3 rounded-2xl glass-card">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl ${inc ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'} flex items-center justify-center"><i class="fa-solid ${inc ? 'fa-arrow-down' : 'fa-arrow-up'}"></i></div>
+      <div><div class="text-sm font-semibold">${esc(t.category)}</div><div class="text-xs text-slate-400">${esc(t.note || '')}</div></div>
+    </div>
+    <div class="text-right"><div class="text-sm font-bold ${inc ? 'text-emerald-400' : 'text-red-400'}">${inc ? '+' : '-'} ${fmt(t.amount)}</div>
+    <div class="text-xs text-slate-400">${esc(t.created.slice(5, 16).replace('T', ' '))}</div></div></div>`;
+}
+async function loadSummary() {
+  const s = await api('/summary');
+  $('balance').textContent = fmt(s.balance);
+  $('incomeTxt').textContent = '+ ' + fmt(s.income);
+  $('expenseTxt').textContent = '- ' + fmt(s.expense);
+  $('recentList').innerHTML = s.recent.length ? s.recent.map(txRow).join('') : '<div class="text-xs text-slate-400">Hali operatsiya yo\'q</div>';
+  $('catList').innerHTML = s.categories.length ? s.categories.map(c => `
+    <div class="flex items-center justify-between p-3 rounded-2xl glass-card">
+      <span class="text-sm">${esc(c.category)}</span><span class="text-sm font-bold">${fmt(c.s)} UZS</span></div>`).join('')
+    : '<div class="text-xs text-slate-400">Bu oy xarajat yo\'q</div>';
+}
+let txKind = 'expense';
+function openTx(kind) {
+  txKind = kind;
+  $('txTitle').textContent = kind === 'income' ? 'Yangi kirim' : 'Yangi xarajat';
+  $('txModal').classList.remove('hidden'); $('txModal').classList.add('flex');
+}
+function closeTx() {
+  $('txModal').classList.add('hidden'); $('txModal').classList.remove('flex');
+  ['txAmount','txCat','txNote'].forEach(i => $(i).value = '');
+}
+async function saveTx() {
+  const amount = parseInt($('txAmount').value, 10);
+  if (!amount || amount <= 0) return tg?.showAlert ? tg.showAlert('Summani kiriting') : alert('Summani kiriting');
+  await api('/transactions', 'POST', {kind: txKind, amount, category: $('txCat').value || 'Boshqa', note: $('txNote').value});
+  closeTx(); loadSummary();
+}
+
+/* ---------- Rejalar ---------- */
+async function loadTasks() {
+  const tasks = await api('/tasks');
+  $('taskList').innerHTML = tasks.length ? tasks.map(t => `
+    <div class="flex items-center justify-between p-3.5 rounded-2xl glass-card border-l-4 border-l-emerald-400">
+      <div class="min-w-0"><div class="text-xs text-emerald-400 font-semibold">${esc(t.time || '')}</div>
+      <div class="text-sm font-medium ${t.done ? 'line-through opacity-50' : ''}">${esc(t.title)}</div></div>
+      <div class="flex items-center gap-3 shrink-0">
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${t.id})" class="w-5 h-5 accent-emerald-500">
+        <button onclick="delTask(${t.id})" class="text-slate-400"><i class="fa-solid fa-trash-can"></i></button>
+      </div></div>`).join('') : '<div class="text-xs text-slate-400">Rejalar yo\'q</div>';
+}
+async function addTask() {
+  const title = $('taskTitle').value.trim();
+  if (!title) return;
+  await api('/tasks', 'POST', {title, time: $('taskTime').value});
+  $('taskTitle').value = ''; $('taskTime').value = ''; loadTasks();
+}
+const toggleTask = async id => { await api(`/tasks/${id}/toggle`, 'POST'); loadTasks(); };
+const delTask = async id => { await api(`/tasks/${id}`, 'DELETE'); loadTasks(); };
+
+/* ---------- AI chat ---------- */
+function bubble(role, text) {
+  const d = document.createElement('div');
+  d.className = 'text-sm px-3 py-2 rounded-2xl max-w-[85%] ' + (role === 'me' ? 'bg-emerald-600 ml-auto' : 'glass-card');
+  d.textContent = text;
+  $('chatLog').appendChild(d);
+  $('chatLog').scrollTop = 1e9;
+  return d;
+}
+let sending = false;
+async function sendChat() {
+  const text = $('chatInput').value.trim();
+  if (!text || sending) return;
+  sending = true; $('chatInput').value = '';
+  bubble('me', text);
+  const wait = bubble('ai', '...');
+  try {
+    const r = await api('/ai', 'POST', {message: text});
+    wait.textContent = r.reply;
+    if (r.changed) { loadSummary(); loadTasks(); }
+  } catch (e) { wait.textContent = 'Xatolik yuz berdi, qayta urinib ko\'ring.'; }
+  sending = false;
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+function toggleVoice() {
+  if (!SR) return bubble('ai', 'Bu qurilmada ovoz tanish ishlamaydi. Matn yozing yoki botga ovozli xabar yuboring.');
+  const r = new SR(); r.lang = 'uz-UZ';
+  $('micBtn').classList.add('bg-red-500/40');
+  r.onresult = e => { $('chatInput').value = e.results[0][0].transcript; sendChat(); };
+  r.onend = () => $('micBtn').classList.remove('bg-red-500/40');
+  r.onerror = () => bubble('ai', 'Ovozni tanib bo\'lmadi, qayta urinib ko\'ring.');
+  r.start();
+}
+
+initHeader();
+loadSummary().catch(console.error);
+loadTasks().catch(console.error);
+</script>
+</body>
+</html>

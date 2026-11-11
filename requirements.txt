@@ -1,0 +1,6 @@
+fastapi==0.115.6
+uvicorn==0.34.0
+aiogram==3.17.0
+aiohttp>=3.9
+anthropic>=0.40.0
+python-dotenv==1.0.1
